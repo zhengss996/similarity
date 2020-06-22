@@ -1,0 +1,10 @@
+<component name="libraryTable">
+  <library name="native">
+    <CLASSES />
+    <JAVADOC />
+    <NATIVE>
+      <root url="file://$USER_HOME$/Tech/soft/hadoop-2.7.3/lib/native" />
+    </NATIVE>
+    <SOURCES />
+  </library>
+</component>

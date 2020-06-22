@@ -1,0 +1,95 @@
+spark-submit --master yarn --queue hainiu --num-executors 21 \
+--executor-cores 5 --executor-memory 7G --driver-memory 6g --driver-cores 2 \
+/home/qingniu/similarity-1.0-niuniu.jar \
+hdfs://ns1/data/hainiu/sum_install_head /user/qingniu/similarity_output10
+
+
+--driver-memory 6g：由于使用了比较大的广播变量，所以driver的内存设置大一点
+--driver-cores 2：由于任务比较多，而driver需要对任务进行管理，所以driver的cpu设置为2
+--executor-cores：设置为5，也就是说一个executor可以同时运行5个task
+--executor-memory：设置为7G，由于中间计算过程会产生大量的数据，会占用大量的内存，
+                   所以executor的内存在集群条件允许的情况下尽量设置大一些
+--num-executors：一共运行21个executor，因为默认并行度为280，所以每个rdd会同时运行280个任务
+                 根据计算公式(2 ~ 3) * cpu = partitions，那cpu的个数为93到140之间
+                 所以  num-executors * executor-cores = 93 ~ 140
+                 也就是  (19 ~ 28) * 5 = 93 ~ 140
+                 由于集群的可用计算资源为180G，所以整个任务使用的资源不能大于180G
+                 而每个executor-memory为7G，driver-memory为6G，所以21 * 7 + 6 = 153G
+
+
+离线报表计算
+14d_install(aid,pkg)   合并的30天安装
+show(aid,pkg)		    3天的展示
+click(aid,pkg)		    3天的点击
+install(aid,pkg)	    3天的安装
+offer(pkg)			    广告
+similarity_rank(pgk1,pkg2,rn)		相似度结果集
+
+广告通投的CTR
+select o.pkg,b.n/a.n as ctr from
+(select pkg,count(1) as n from show group by pkg) a
+inner join
+(select pkg,count(1) as n from click group by pkg) b
+on a.pkg = b.pkg
+inner join offer o
+on b.pkg = o.pkg
+
+
+广告通投的CVR
+select o.pkg,b.n/a.n as cvr from
+(select pkg,count(1) as n from click group by pkg) a
+inner join
+(select pkg,count(1) as n from install group by pkg) b
+on a.pkg = b.pkg
+inner join offer o
+on b.pkg = o.pkg
+
+
+广告精准人群分4波
+create table test_aid_20 as
+select a.aid from 14d_install 14d a
+inner join (
+select o.pkg,s.pkg2 from offer o inner join similarity_rank s on o.pkg = s.pkg1 where s.rn <= 20) b
+on a.pkg = b.pkg2
+group by aid
+
+create table test_aid_40 as
+select a.aid from 14d_install 14d a
+inner join (
+select o.pkg,s.pkg2 from offer o inner join similarity_rank s on o.pkg = s.pkg1 where s.rn <= 40) b
+on a.pkg = b.pkg2
+group by aid
+
+create table test_aid_100 as
+select a.aid from 14d_install 14d a
+inner join (
+select o.pkg,s.pkg2 from offer o inner join similarity_rank s on o.pkg = s.pkg1 where s.rn <= 100) b
+on a.pkg = b.pkg2
+group by aid
+
+create table test_aid_200 as
+select a.aid from 14d_install 14d a
+inner join (
+select o.pkg,s.pkg2 from offer o inner join similarity_rank s on o.pkg = s.pkg1 where s.rn <= 200) b
+on a.pkg = b.pkg2
+group by aid
+
+
+广告精准人群的CTR
+select o.pkg,b.n/a.n as ctr from
+(select pkg,count(1) as n from show s inner join test_aid_200 t on s.aid=t.aid group by pkg) a
+inner join
+(select pkg,count(1) as n from click c inner join test_aid_200 t on c.aid=t.aid group by pkg) b
+on a.pkg = b.pkg
+inner join offer o
+on b.pkg = o.pkg
+
+
+广告精准人群的CVR
+select o.pkg,b.n/a.n as cvr from
+(select pkg,count(1) as n from click c join test_aid_200 t on c.aid=t.aid group by pkg) a
+inner join
+(select pkg,count(1) as n from install i join test_aid_200 t on i.aid=t.aid group by pkg) b
+on a.pkg = b.pkg
+inner join offer o
+on b.pkg = o.pkg
